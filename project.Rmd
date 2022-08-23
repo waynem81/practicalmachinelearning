@@ -1,0 +1,106 @@
+# Practical Machine Learning Week r Project
+
+## Intro
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement – a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here: http://web.archive.org/web/20161224072740/http:/groupware.les.inf.puc-rio.br/har (see the section on the Weight Lifting Exercise Dataset).
+
+## Load The Data
+```{r}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(caret)
+library(ggplot2)
+library(rpart)
+library(gbm)
+library(randomForest)
+
+trainingData <- read.csv('./pml-training.csv', header=T) 
+testingData <- read.csv('./pml-testing.csv', header=T)
+
+head(trainingData)
+head(testingData)
+```
+### Goal
+To compare the two datasets to make a prediction
+
+```{r}
+set.seed(175)
+trainingSample <- createDataPartition(y=trainingData$classe, p=0.7, list=FALSE)
+training <- trainingData[trainingSample, ]
+testing <- trainingData[-trainingSample, ]
+
+head(training)
+head(testing)
+```
+
+### Getting Features with data populated
+```{r}
+blank_colnames <- sapply(names(testingData), function(x) all(is.na(testingData[,x])==TRUE))
+nonblanknames <- names(blank_colnames)[blank_colnames==FALSE]
+nonblanknames <- nonblanknames[-(1:7)]
+nonblanknames <- nonblanknames[1:(length(nonblanknames)-1)]
+nonblanknames
+```
+
+## Building The Models
+
+Using three different models.
+```{r}
+fitControl <- trainControl(method='cv', number = 3)
+
+model_cart <- train(
+  classe ~ ., 
+  data=training[, c('classe', nonblanknames)],
+  trControl=fitControl,
+  method='rpart'
+)
+save(model_cart, file='./ModelFitCART.RData')
+model_gbm <- train(
+  classe ~ ., 
+  data=training[, c('classe', nonblanknames)],
+  trControl=fitControl,
+  method='gbm'
+)
+save(model_gbm, file='./ModelFitGBM.RData')
+model_rf <- train(
+  classe ~ ., 
+  data=training[, c('classe', nonblanknames)],
+  trControl=fitControl,
+  method='rf',
+  ntree=100
+)
+save(model_rf, file='./ModelFitRF.RData')
+```
+
+## Testing The Models
+
+```{r}
+predCART <- predict(model_cart, newdata=testing)
+cmCART <- confusionMatrix(predCART, as.factor(testing$classe))
+
+predGBM <- predict(model_gbm, newdata=testing)
+cmGBM <- confusionMatrix(predGBM, as.factor(testing$classe))
+
+predRF <- predict(model_rf, newdata=testing)
+cmRF <- confusionMatrix(predRF, as.factor(testing$classe))
+
+AccuracyResults <- data.frame(
+  Model = c('CART', 'GBM', 'RF'),
+  Accuracy = rbind(cmCART$overall[1], cmGBM$overall[1], cmRF$overall[1])
+)
+print(AccuracyResults)
+```
+
+## Predicting Results
+Picked Random Forest for the model with the best accuracy.
+
+```{r}
+predTesting <- predict(model_rf, newdata=testingData)
+TestingPredictionResults <- data.frame(
+  problem_id=testingData$problem_id,
+  predicted=predTesting
+)
+print(TestingPredictionResults)
+```
+
+## Conclusion
+Was able to make predictions using Random Forest with 99% accuracy.
